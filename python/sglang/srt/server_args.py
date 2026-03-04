@@ -544,6 +544,7 @@ class ServerArgs:
     custom_weight_loader: Optional[List[str]] = None
     weight_loader_disable_mmap: bool = False
     weight_loader_sort_files: bool = False
+    weight_loader_sort_tensors: bool = False
     remote_instance_weight_loader_seed_instance_ip: Optional[str] = None
     remote_instance_weight_loader_seed_instance_service_port: Optional[int] = None
     remote_instance_weight_loader_send_weights_group_ports: Optional[List[int]] = None
@@ -3558,6 +3559,11 @@ class ServerArgs:
             "--weight-loader-sort-files",
             action="store_true",
             help="Sort safetensors weight files to improve sequential IO.",
+        )
+        parser.add_argument(
+            "--weight-loader-sort-tensors",
+            action="store_true",
+            help="Sort tensors by their storage offset within each safetensors file to improve sequential IO.",
         )
         parser.add_argument(
             "--remote-instance-weight-loader-seed-instance-ip",

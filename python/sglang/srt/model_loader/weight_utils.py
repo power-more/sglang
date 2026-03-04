@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+import struct
 import tempfile
 from collections import defaultdict
 from typing import (
@@ -607,11 +608,36 @@ def safetensors_encrypted_weights_iterator(
     raise NotImplementedError()
 
 
+def get_safetensors_offsets(file_path):
+    """Parse the safetensors header and return physical byte offsets for every tensor."""
+    with open(file_path, "rb") as f:
+        header_size_bytes = f.read(8)
+        header_size = struct.unpack("<Q", header_size_bytes)[0]
+
+        header_json_bytes = f.read(header_size)
+        header = json.loads(header_json_bytes)
+
+        data_start = 8 + header_size
+        offset_map = {}
+
+        for key, value in header.items():
+            if key == "__metadata__":
+                continue
+            rel_offsets = value.get("data_offsets")
+            if rel_offsets:
+                abs_start = data_start + rel_offsets[0]
+                abs_end = data_start + rel_offsets[1]
+                offset_map[key] = (abs_start, abs_end)
+
+        return offset_map
+
+
 def safetensors_weights_iterator(
     hf_weights_files: List[str],
     is_all_weights_sharded: bool = False,
     decryption_key: Optional[str] = None,
     disable_mmap: bool = False,
+    sort_tensors: bool = False,
 ) -> Generator[Tuple[str, torch.Tensor], None, None]:
     """Iterate over the weights in the model safetensor files.
 
@@ -640,7 +666,12 @@ def safetensors_weights_iterator(
                     yield name, param
         else:
             with safetensors.safe_open(st_file, framework="pt", device="cpu") as f:
-                for name in f.keys():
+                all_keys = list(f.keys())
+                if sort_tensors:
+                    offset_map = get_safetensors_offsets(st_file)
+                    if offset_map:
+                        all_keys.sort(key=lambda name: offset_map.get(name, (0, 0))[0])
+                for name in all_keys:
                     yield name, f.get_tensor(name)
 
 
@@ -650,6 +681,7 @@ def multi_thread_safetensors_weights_iterator(
     decryption_key: Optional[str] = None,
     max_workers: int = 4,
     disable_mmap: bool = False,
+    sort_tensors: bool = False,
 ) -> Generator[Tuple[str, torch.Tensor], None, None]:
     """Multi-Thread iterate over the weights in the model safetensor files.
 
@@ -675,7 +707,14 @@ def multi_thread_safetensors_weights_iterator(
                 result = safetensors.torch.load(f.read())
         else:
             with safetensors.safe_open(st_file, framework="pt", device="cpu") as f:
-                result = {k: f.get_tensor(k) for k in f.keys()}
+                if sort_tensors:
+                    offset_map = get_safetensors_offsets(st_file)
+                    all_keys = list(f.keys())
+                    if offset_map:
+                        all_keys.sort(key=lambda name: offset_map.get(name, (0, 0))[0])
+                    result = {k: f.get_tensor(k) for k in all_keys}
+                else:
+                    result = {k: f.get_tensor(k) for k in f.keys()}
 
         return result
 

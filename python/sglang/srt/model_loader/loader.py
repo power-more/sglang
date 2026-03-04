@@ -462,6 +462,9 @@ class DefaultModelLoader(BaseModelLoader):
             weight_loader_disable_mmap = (
                 get_global_server_args().weight_loader_disable_mmap
             )
+            weight_loader_sort_tensors = (
+                get_global_server_args().weight_loader_sort_tensors
+            )
 
             if extra_config.get("enable_multithread_load"):
                 weights_iterator = multi_thread_safetensors_weights_iterator(
@@ -470,10 +473,13 @@ class DefaultModelLoader(BaseModelLoader):
                         "num_threads", self.DEFAULT_NUM_THREADS
                     ),
                     disable_mmap=weight_loader_disable_mmap,
+                    sort_tensors=weight_loader_sort_tensors,
                 )
             else:
                 weights_iterator = safetensors_weights_iterator(
-                    hf_weights_files, disable_mmap=weight_loader_disable_mmap
+                    hf_weights_files,
+                    disable_mmap=weight_loader_disable_mmap,
+                    sort_tensors=weight_loader_sort_tensors,
                 )
 
         else:
