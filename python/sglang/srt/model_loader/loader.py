@@ -471,6 +471,15 @@ class DefaultModelLoader(BaseModelLoader):
 
         if envs.SGLANG_SORT_WEIGHT_FILES.get():
             hf_weights_files.sort()
+            tp_size = get_tensor_model_parallel_world_size()
+            if tp_size > 1:
+                tp_rank = get_tensor_model_parallel_rank()
+                staggered = []
+                for i in range(0, len(hf_weights_files), tp_size):
+                    group = hf_weights_files[i : i + tp_size]
+                    n = len(group)
+                    staggered.extend(group[(j + tp_rank) % n] for j in range(n))
+                hf_weights_files = staggered
 
         return hf_folder, hf_weights_files, use_safetensors
 
